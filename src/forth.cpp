@@ -35,7 +35,6 @@ void compile(Lexer& tokens, byte* buffer) {
     while ((token = tokens.next())) {
         // Look up bytecode generator function pointer using token name
         iwordGenerator generator = translate(token);
-        Serial.println((uintptr_t)generator, 16);
         if (generator) generator(buffer);
         else {
             byte number = 0;

@@ -22,7 +22,6 @@ typedef void (*iwordGenerator)(byte*&);
 // Convenience template function to generate bytecode for words with deterministic bytecode
 template <iword... iwords>
 void makeWord(byte*& buffer) {
-    Serial.println(F("Generating const word..."));
     for (iword instr : {iwords...}) {
         *buffer++ = instr & 0xFF;
         *buffer++ = instr >> 8;
