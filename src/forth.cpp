@@ -28,34 +28,15 @@ char* Lexer::next() {
     else return nullptr;
 }
 
-// Create a stack of addresses
-AddrStack::AddrStack() : stack{}, stackPtr(stack) {}
-AddrStack::~AddrStack() {
-    // delete[] stack;
-}
-
-// Push an element onto an address stack
-void AddrStack::push(uintptr_t address) {
-    *stackPtr++ = address;
-}
-
-// Pop an element off of an address stack
-uintptr_t AddrStack::pop() {
-    return *--stackPtr;
-}
-
 // Compile a token stream into bytecode stored in a page buffer
 void compile(Lexer& tokens, byte* buffer) {
     char* token;
-    AddrStack branches;
+    // AddrStack branches;
     while ((token = tokens.next())) {
-        const iword* instrString = translate(token);
-        if (instrString)
-            while (pgm_read_word(instrString) != END_BLOCK) {
-                // AVR instructions are stored little-endian
-                *buffer++ = pgm_read_word(instrString) & 0xFF;
-                *buffer++ = pgm_read_word(instrString++) >> 8;
-            }
+        // Look up bytecode generator function pointer using token name
+        iwordGenerator generator = translate(token);
+        Serial.println((uintptr_t)generator, 16);
+        if (generator) generator(buffer);
         else {
             byte number = 0;
             if (!strcmp_P(token, (const char*)F("0")) || (number = atoi(token))) {
@@ -64,36 +45,7 @@ void compile(Lexer& tokens, byte* buffer) {
                     *buffer++ = instr >> 8;
                 }
             }
-            else if (!strcmp_P(token, (const char*)F("IF"))) {
-                for (iword instr : {POP(30), CPI(30, 0)}) {
-                    *buffer++ = instr & 0xFF;
-                    *buffer++ = instr >> 8;
-                }
-                // Defer branch opcode generation until branch destination is known
-                branches.push((uintptr_t)buffer);
-                // Leave space for the branch opcode to be retroactively inserted
-                buffer += 2;
-            }
-            else if (!strcmp_P(token, (const char*)F("ELSE"))) {
-                // Insert conditional branch at the location of the IF statement
-                byte* instrLoc = (byte*)branches.pop();
-                iword branchCode = BRBS(Flags::Z, uintptr_t(buffer - instrLoc) >> 1);
-                *instrLoc++ = branchCode & 0xFF;
-                *instrLoc = branchCode >> 8;
-                // If the IF predicate executes, it needs to skip the ELSE predicate
-                branches.push((uintptr_t)buffer);
-                // Leave space for the jump opcode to be retroactively inserted
-                buffer += 2;
-            }
-            else if (!strcmp_P(token, (const char*)F("THEN"))) {
-                // Insert unconditional branch at the location of the ELSE statement
-                // Fix later - this implementation necessitates an ELSE or the IF will jump unconditionally
-                byte* instrLoc = (byte*)branches.pop();
-                iword rjmpCode = JMP((uintptr_t(buffer - instrLoc) >> 1) - 1);
-                *instrLoc++ = rjmpCode & 0xFF;
-                *instrLoc = rjmpCode >> 8;
-                // Note that THEN does not generate any machine code of its own
-            }
+           else Serial.println(F("Error translating token"));
         }
     }
 
@@ -103,21 +55,12 @@ void compile(Lexer& tokens, byte* buffer) {
 }
 
 // Fetch the instruction word sequence associated with the given token
-const iword* translate(const char* token) {
+const iwordGenerator translate(const char* token) {
     const char* knownWord = names;
     uint16_t wordIdx = 0;
     while (strcmp_P("", knownWord)) {
         if (!strcmp_P(token, knownWord)) {
-            const iword* bytecodePtr = bytecodes;
-            uint16_t bytecodeIdx = 0;
-            while (bytecodeIdx < wordIdx) {
-                // Advance the bytecode pointer to the start of the next word's bytecode
-                while (pgm_read_word(bytecodePtr) != END_BLOCK) ++bytecodePtr;
-                ++bytecodePtr;
-
-                ++bytecodeIdx;
-            }
-            return bytecodePtr;
+            return (iwordGenerator) pgm_read_word(generators + wordIdx);
         }
         ++wordIdx;
         

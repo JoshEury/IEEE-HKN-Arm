@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "forthwords.h"
 #include "opcodes.h"
 
 class Lexer {
@@ -12,21 +13,9 @@ public:
     char* next();
 };
 
-class AddrStack {
-    uintptr_t stack[8];
-    uintptr_t* stackPtr;
-
-public:
-    AddrStack();
-    ~AddrStack();
-    AddrStack& operator = (AddrStack& cpy) = delete;
-    void push(uintptr_t address);
-    uintptr_t pop();
-};
-
 void compile(Lexer& tokens, byte* buffer);
 
-const iword* translate(const char* token);
+const iwordGenerator translate(const char* token);
 
 // Perform a call to a given memory address
 inline void call(const byte *ptr) {
