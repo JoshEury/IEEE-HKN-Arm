@@ -16,8 +16,8 @@ public:
     uintptr_t pop();
 };
 
-// A pointer to a void function with a byte pointer parameter
-typedef void (*iwordGenerator)(byte*&);
+// A pointer to a void function with a byte pointer reference parameter
+typedef void (*const iwordGenerator)(byte*&);
 
 // Convenience template function to generate bytecode for words with deterministic bytecode
 template <iword... iwords>

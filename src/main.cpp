@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <NeoHWSerial.h>
 #include <Servo.h>
 #include <EEPROM.h>
 #include <ArduinoSTL.h>
@@ -30,18 +31,23 @@ A4988 base(BASE_STEP_PIN, BASE_DIR_PIN);
 
 // Input stream of FORTH tokens
 // char iStream[] = "0 37 LOAD 32 XOR 0 37 STORE";  // Toggle pin 13
-char iStream[] = "0 37 LOAD 0 35 LOAD 16 AND IF 223 AND ELSE 32 OR THEN 0 37 STORE"; // Set D13 to !D12
+// char iStream[] = "0 37 LOAD 0 35 LOAD 16 AND IF 223 AND ELSE 32 OR THEN 0 37 STORE"; // Set D13 to !D12
+char iStream[1024] = "";
+uint16_t iStreamLen = 0;
 Lexer lexer(iStream);
 
 // Dump a section of flash memory to the serial console
 void dump(const byte* ptr, uint16_t len) {
-    Serial.printf(F("Dump of %04X:\n"), ptr);
+    NeoSerial.printf(F("Dump of %04X:\n"), ptr);
     for (uint16_t i = 0; i < len; i++) {
-        if ((i&15) == 0) Serial.println();
-        Serial.printf(F("%02X "), pgm_read_byte((uint16_t)ptr + i));
+        if ((i&15) == 0) NeoSerial.println();
+        NeoSerial.printf(F("%02X "), pgm_read_byte((uint16_t)ptr + i));
     }
-    Serial.println();
+    NeoSerial.println();
 }
+
+static void SerialEvent(uint8_t chr);
+volatile bool prgReady = false;
 
 void setup() {
     // put your setup code here, to run once:
@@ -50,58 +56,98 @@ void setup() {
 
     pinMode(13, OUTPUT);
 
-    Serial.begin(115200);
-    Serial.println("Compiling FORTH...");
-    compile(lexer, pgBuffer);
+    NeoSerial.attachInterrupt(SerialEvent);
+    NeoSerial.begin(115200);
+    // NeoSerial.println(F("Compiling FORTH..."));
+    // compile(lexer, pgBuffer);
 
 #ifdef DEBUG
-    for (int i=0; i<SPM_PAGESIZE; ++i) {
-        if (pgBuffer[i] < 0x10) Serial.print('0');
-        Serial.print(pgBuffer[i], 16);
-        if ((i & 15) == 15) Serial.println();
-        else Serial.print(' ');
-    }
-
-    Serial.println();
-    Serial.flush();
-
     dump(forthPgm, 128);
-    Serial.flush();
+    NeoSerial.flush();
 
     delay(1000);
 #endif  // DEBUG
 
-    if (EEPROM.read(0)) {
-        Serial.println(F("Modifying flash contents..."));
-        optiboot_writePage(forthPgm, pgBuffer, 0);
-        Serial.println(F("New flash written!"));
-    }
-    else {
-        Serial.println(F("EEPROM 0x00 is 0 - flash already written."));
-    }
-    EEPROM.update(0, 0);
+    // if (EEPROM.read(0)) {
+    //     NeoSerial.println(F("Modifying flash contents..."));
+    //     optiboot_writePage(forthPgm, pgBuffer, 0);
+    //     NeoSerial.println(F("New flash written!"));
+    // }
+    // else {
+    //     NeoSerial.println(F("EEPROM 0x00 is 0 - flash already written."));
+    // }
+    // EEPROM.update(0, 0);
 
-    Serial.println(F("Executing..."));
+    NeoSerial.println(F("Welcome to interactive FORTH!"));
     delay(1000);
 }
 
 void loop() {
+    if (prgReady) {
+        prgReady = false;
+
+        // Echo back received program
+        NeoSerial.println();
+        NeoSerial.println();
+        NeoSerial.println(F("Received program:"));
+        NeoSerial.println(iStream);
+
+        // Clear page write buffer and reset lexer position
+        for (byte i = 0; i < SPM_PAGESIZE; ++i) pgBuffer[i] = 0x00;
+        lexer.setStart(iStream);
+        
+        // Compile program
+        NeoSerial.println(F("Compiling FORTH..."));
+        compile(lexer, pgBuffer);
+
+#ifdef DEBUG
+        for (int i=0; i<SPM_PAGESIZE; ++i) {
+            if (pgBuffer[i] < 0x10) NeoSerial.print('0');
+            NeoSerial.print(pgBuffer[i], 16);
+            if ((i & 15) == 15) NeoSerial.println();
+            else NeoSerial.print(' ');
+        }
+
+        NeoSerial.println();
+        NeoSerial.flush();
+#endif
+
+        // Write program to flash
+        NeoSerial.println(F("Modifying flash contents..."));
+        optiboot_writePage(forthPgm, pgBuffer, 0);
+
+        NeoSerial.println(F("New flash written!"));
+
+        // Reset receive buffer string and discard any characters received during compilation
+        uint16_t i = 0;
+        while (iStream[i]) iStream[i++] = '\0';
+        iStreamLen = 0;
+    }
     // put your main code here, to run repeatedly:
+#ifdef DEBUG
     unsigned long start = micros();
+#endif
     call(forthPgm);
+#ifdef DEBUG
     unsigned long finish = micros();
-    Serial.print("Array call took ");
-    Serial.print(finish - start);
-    Serial.println(" microseconds");
+    NeoSerial.print(F("Array call took "));
+    NeoSerial.print(finish - start);
+    NeoSerial.println(F(" microseconds"));
+#endif
     delay(500);
 }
 
-void serialEvent() {
-    while (Serial.available()) {
-        if ((char)Serial.read() == 'C') {
-            EEPROM.update(0, 255);
-            Serial.println(F("EEPROM cleared! Reflashing code will be active on next reset."));
-        }
+static void SerialEvent(uint8_t chr) {
+    if (chr == '\n' || chr == '\r') {
+        prgReady = true;
     }
-    if (!EEPROM.read(0)) Serial.println(F("Enter 'C' to clear EEPROM reflash guard."));
+    else if (chr == '\b' && iStreamLen) {
+        iStream[--iStreamLen] = '\0';
+        NeoSerial.print(F("\b \b"));
+    }
+    else {
+        iStream[iStreamLen] = chr;
+        iStream[++iStreamLen] = '\0';
+        NeoSerial.print((char)chr);
+    }
 }

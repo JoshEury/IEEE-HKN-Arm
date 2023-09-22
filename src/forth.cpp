@@ -1,3 +1,4 @@
+#include <NeoHWSerial.h>
 #include <ArduinoSTL.h>
 #include "forth.h"
 #include "forthwords.h"
@@ -44,7 +45,11 @@ void compile(Lexer& tokens, byte* buffer) {
                     *buffer++ = instr >> 8;
                 }
             }
-           else Serial.println(F("Error translating token"));
+            else {
+                NeoSerial.println(F("Error translating token: "));
+                NeoSerial.println(token);
+                NeoSerial.flush();
+            }
         }
     }
 
@@ -53,7 +58,7 @@ void compile(Lexer& tokens, byte* buffer) {
     *buffer = RET >> 8;
 }
 
-// Fetch the instruction word sequence associated with the given token
+// Fetch the iword sequence generator function associated with the given token
 const iwordGenerator translate(const char* token) {
     const char* knownWord = names;
     uint16_t wordIdx = 0;
