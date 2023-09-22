@@ -8,6 +8,7 @@
 #include "forth.h"
 
 // #define DEBUG
+// :)
 
 const byte BASE_STEP_PIN = 3;
 const byte BASE_DIR_PIN = 2;
