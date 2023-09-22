@@ -29,4 +29,5 @@ constexpr A4988::A4988(const byte stepPin, const byte dirPin)
     , dirPin(dirPin)
     , currentPos(0)
     , targetPos(0)
+    , currentSpeed(0)
 {}
