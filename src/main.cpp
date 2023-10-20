@@ -2,9 +2,10 @@
 #include <NeoHWSerial.h>
 #include <Servo.h>
 #include <EEPROM.h>
+// #include <AccelStepper.h>
 #include <ArduinoSTL.h>
 #include "optiboot.h"
-#include "a4988.h"
+#include "A4988.h"
 #include "forth.h"
 
 // #define DEBUG
@@ -27,7 +28,9 @@ Servo elbowA;
 Servo elbowB;
 
 // Stepper motor (step pin 3, direction pin 2)
-A4988 base(BASE_STEP_PIN, BASE_DIR_PIN);
+// AccelStepper base(AccelStepper::DRIVER, BASE_STEP_PIN, BASE_DIR_PIN);
+// A4988 base(BASE_STEP_PIN, BASE_DIR_PIN);
+A4988 base(200, BASE_DIR_PIN, BASE_STEP_PIN);
 
 // Input stream of FORTH tokens
 // char iStream[] = "0 37 LOAD 32 XOR 0 37 STORE";  // Toggle pin 13
@@ -49,12 +52,22 @@ void dump(const byte* ptr, uint16_t len) {
 static void SerialEvent(uint8_t chr);
 volatile bool prgReady = false;
 
+int16_t target = 1000;
+
 void setup() {
     // put your setup code here, to run once:
     elbowA.attach(ELBOW_A_PIN);
     elbowB.attach(ELBOW_B_PIN);
 
     pinMode(13, OUTPUT);
+
+    // base.setSpeed(200);
+    // base.setAcceleration(100);
+    // pinMode(BASE_DIR_PIN, OUTPUT);
+    // pinMode(BASE_STEP_PIN, OUTPUT);
+    // digitalWrite(BASE_DIR_PIN, HIGH);
+    base.begin(60, 1);
+    base.setSpeedProfile(base.LINEAR_SPEED, 1000, 1000);
 
     NeoSerial.attachInterrupt(SerialEvent);
     NeoSerial.begin(115200);
@@ -83,6 +96,22 @@ void setup() {
 }
 
 void loop() {
+    // base.runToNewPosition(1000);
+    base.move(360);
+    delay(500);
+    // base.runToNewPosition(0);
+    base.move(-360);
+    delay(500);
+    // digitalWrite(BASE_STEP_PIN, HIGH);
+    // delay(1);
+    // digitalWrite(BASE_STEP_PIN, LOW);
+    // delay(9);
+    // digitalWrite(BASE_STEP_PIN, HIGH);
+    // delay(1);
+    // digitalWrite(BASE_STEP_PIN, LOW);
+    // delay(9);
+
+#if 0
     if (prgReady) {
         prgReady = false;
 
@@ -134,7 +163,7 @@ void loop() {
     NeoSerial.print(finish - start);
     NeoSerial.println(F(" microseconds"));
 #endif
-    delay(500);
+#endif
 }
 
 static void SerialEvent(uint8_t chr) {
