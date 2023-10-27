@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 #include <ArduinoSTL.h>
 #include "optiboot.h"
-#include "a4988.h"
+#include "A4988.h"
 #include "forth.h"
 
 // #define DEBUG
@@ -12,6 +12,8 @@
 
 const byte BASE_STEP_PIN = 3;
 const byte BASE_DIR_PIN = 2;
+const byte ELBOW_STEP_PIN = 5;
+const byte ELBOW_DIR_PIN = 4;
 const byte ELBOW_A_PIN = 9;
 const byte ELBOW_B_PIN = 10;
 
@@ -29,6 +31,7 @@ Servo elbowB;
 
 // Stepper motor (step pin 3, direction pin 2)
 A4988 base(BASE_STEP_PIN, BASE_DIR_PIN);
+A4988 elbow(ELBOW_STEP_PIN, ELBOW_DIR_PIN);
 
 // Input stream of FORTH tokens
 // char iStream[] = "0 37 LOAD 32 XOR 0 37 STORE";  // Toggle pin 13
@@ -56,6 +59,7 @@ void setup() {
     elbowB.attach(ELBOW_B_PIN);
 
     pinMode(13, OUTPUT);
+    pinMode(5, OUTPUT);
 
     NeoSerial.attachInterrupt(SerialEvent);
     NeoSerial.begin(115200);
@@ -82,6 +86,8 @@ void setup() {
     NeoSerial.println(F("Welcome to interactive FORTH!"));
     delay(1000);
 }
+
+byte actionNum = 0;
 
 void loop() {
     if (prgReady) {
@@ -128,7 +134,18 @@ void loop() {
 #ifdef DEBUG
     unsigned long start = micros();
 #endif
-    call(forthPgm);
+    //call(forthPgm);
+    NeoSerial.println("Enter action (0 for base motor, 1 for elbor motor): \n");
+    while(NeoSerial.available() == 0) {}           //waits for user input
+    actionNum = NeoSerial.parseInt();
+    if(actionNum) {
+        digitalWrite(ELBOW_STEP_PIN, HIGH);
+    }
+    else {
+        digitalWrite(ELBOW_STEP_PIN, LOW);
+    }
+
+
 #ifdef DEBUG
     unsigned long finish = micros();
     NeoSerial.print(F("Array call took "));
