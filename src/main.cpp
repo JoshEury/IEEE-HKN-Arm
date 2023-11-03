@@ -13,6 +13,8 @@
 
 const byte BASE_STEP_PIN = 3;
 const byte BASE_DIR_PIN = 2;
+const byte ELBOW_STEP_PIN = 5;
+const byte ELBOW_DIR_PIN = 4;
 const byte ELBOW_A_PIN = 9;
 const byte ELBOW_B_PIN = 10;
 
@@ -103,6 +105,8 @@ void setup() {
     delay(1000);
 }
 
+byte actionNum = 0;
+
 void loop() {
     if (lineReady) {
         lineReady = false;
@@ -173,7 +177,18 @@ void loop() {
 #ifdef DEBUG
     unsigned long start = micros();
 #endif
-    call(forthPgm);
+    //call(forthPgm);
+    NeoSerial.println("Enter action (0 for base motor, 1 for elbor motor): \n");
+    while(NeoSerial.available() == 0) {}           //waits for user input
+    actionNum = NeoSerial.parseInt();
+    if(actionNum) {
+        digitalWrite(ELBOW_STEP_PIN, HIGH);
+    }
+    else {
+        digitalWrite(ELBOW_STEP_PIN, LOW);
+    }
+
+
 #ifdef DEBUG
     unsigned long finish = micros();
     NeoSerial.print(F("Array call took "));
