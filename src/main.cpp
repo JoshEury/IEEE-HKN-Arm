@@ -50,8 +50,15 @@ void dump(const byte* ptr, uint16_t len) {
     NeoSerial.println();
 }
 
+void clearIStream() {
+    uint16_t i = 0;
+    while (iStream[i]) iStream[i++] = '\0';
+    iStreamLen = 0;
+}
+
 static void SerialEvent(uint8_t chr);
-volatile bool prgReady = false;
+volatile bool lineReady = false;
+bool prgMode = true;
 
 int16_t target = 1000;
 
@@ -97,38 +104,55 @@ void setup() {
 }
 
 void loop() {
-    // base.runToNewPosition(1000);
-    base.move(360);
-    delay(500);
-    // base.runToNewPosition(0);
-    base.move(-360);
-    delay(500);
-    // digitalWrite(BASE_STEP_PIN, HIGH);
-    // delay(1);
-    // digitalWrite(BASE_STEP_PIN, LOW);
-    // delay(9);
-    // digitalWrite(BASE_STEP_PIN, HIGH);
-    // delay(1);
-    // digitalWrite(BASE_STEP_PIN, LOW);
-    // delay(9);
+    if (lineReady) {
+        lineReady = false;
+        NeoSerial.flush();
 
-#if 0
-    if (prgReady) {
-        prgReady = false;
+        if (prgMode) {
+            if (!strncmp(iStream, "exit", 4)) {
+                NeoSerial.println("\nLeaving FORTH");
+                prgMode = false;
+                clearIStream();
+                return;
+            }
 
-        // Echo back received program
-        NeoSerial.println();
-        NeoSerial.println();
-        NeoSerial.println(F("Received program:"));
-        NeoSerial.println(iStream);
+            // Echo back received program
+            NeoSerial.println();
+            NeoSerial.println();
+            NeoSerial.println(F("Received program:"));
+            NeoSerial.println(iStream);
 
-        // Clear page write buffer and reset lexer position
-        for (byte i = 0; i < SPM_PAGESIZE; ++i) pgBuffer[i] = 0x00;
-        lexer.setStart(iStream);
-        
-        // Compile program
-        NeoSerial.println(F("Compiling FORTH..."));
-        compile(lexer, pgBuffer);
+            // Clear page write buffer and reset lexer position
+            for (byte i = 0; i < SPM_PAGESIZE; ++i) pgBuffer[i] = 0x00;
+            lexer.setStart(iStream);
+            
+            // Compile program
+            NeoSerial.println(F("Compiling FORTH..."));
+            compile(lexer, pgBuffer);
+            // Write program to flash
+            NeoSerial.println(F("Modifying flash contents..."));
+            optiboot_writePage(forthPgm, pgBuffer, 0);
+
+            NeoSerial.println(F("New flash written!"));
+        }
+        else {
+            if (!strncmp(iStream, "shell", 5)) {
+                prgMode = true;
+                clearIStream();
+                return;
+            }
+
+            // Parse command
+            char* token = iStream;
+            lexer.setStart(iStream);
+            while ((token = lexer.next())) {
+                if (*token == 'M') {
+                    int16_t moveDist = atoi(++token);
+                    base.move(moveDist);
+                }
+            }
+            clearIStream();
+        }
 
 #ifdef DEBUG
         for (int i=0; i<SPM_PAGESIZE; ++i) {
@@ -142,16 +166,8 @@ void loop() {
         NeoSerial.flush();
 #endif
 
-        // Write program to flash
-        NeoSerial.println(F("Modifying flash contents..."));
-        optiboot_writePage(forthPgm, pgBuffer, 0);
-
-        NeoSerial.println(F("New flash written!"));
-
         // Reset receive buffer string and discard any characters received during compilation
-        uint16_t i = 0;
-        while (iStream[i]) iStream[i++] = '\0';
-        iStreamLen = 0;
+        clearIStream();
     }
     // put your main code here, to run repeatedly:
 #ifdef DEBUG
@@ -164,12 +180,11 @@ void loop() {
     NeoSerial.print(finish - start);
     NeoSerial.println(F(" microseconds"));
 #endif
-#endif
 }
 
 static void SerialEvent(uint8_t chr) {
     if (chr == '\n' || chr == '\r') {
-        prgReady = true;
+        lineReady = true;
     }
     else if (chr == '\b' && iStreamLen) {
         iStream[--iStreamLen] = '\0';
